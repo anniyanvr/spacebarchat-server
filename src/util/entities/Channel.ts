@@ -1,17 +1,17 @@
 /*
 	Spacebar: A FOSS re-implementation and extension of the Discord.com backend.
 	Copyright (C) 2023 Spacebar and Spacebar Contributors
-	
+
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as published
 	by the Free Software Foundation, either version 3 of the License, or
 	(at your option) any later version.
-	
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Affero General Public License for more details.
-	
+
 	You should have received a copy of the GNU Affero General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
@@ -44,6 +44,7 @@ import { Recipient } from "./Recipient";
 import { PublicUserProjection, User } from "./User";
 import { VoiceState } from "./VoiceState";
 import { Webhook } from "./Webhook";
+import { dbEngine } from "../util/Database";
 
 export enum ChannelType {
 	GUILD_TEXT = 0, // a text channel within a guild
@@ -69,7 +70,10 @@ export enum ChannelType {
 	UNHANDLED = 255, // unhandled unowned pass-through channel type
 }
 
-@Entity("channels")
+@Entity({
+	name: "channels",
+	engine: dbEngine,
+})
 export class Channel extends BaseClass {
 	@Column()
 	created_at: Date;
@@ -105,7 +109,7 @@ export class Channel extends BaseClass {
 
 	@Column({ nullable: true })
 	@RelationId((channel: Channel) => channel.parent)
-	parent_id: string;
+	parent_id: string | null;
 
 	@JoinColumn({ name: "parent_id" })
 	@ManyToOne(() => Channel)
@@ -319,7 +323,7 @@ export class Channel extends BaseClass {
 						event: "CHANNEL_CREATE",
 						data: channel,
 						guild_id: channel.guild_id,
-				  } as ChannelCreateEvent)
+					} as ChannelCreateEvent)
 				: Promise.resolve(),
 			Guild.insertChannelInOrder(guild.id, ret.id, position, guild),
 		]);
@@ -459,9 +463,21 @@ export class Channel extends BaseClass {
 	}
 
 	static async deleteChannel(channel: Channel) {
-		await Message.delete({ channel_id: channel.id }); //TODO we should also delete the attachments from the cdn but to do that we need to move cdn.ts in util
-		//TODO before deleting the channel we should check and delete other relations
+		// TODO Delete attachments from the CDN for messages in the channel
 		await Channel.delete({ id: channel.id });
+
+		const guild = await Guild.findOneOrFail({
+			where: { id: channel.guild_id },
+			select: { channel_ordering: true },
+		});
+
+		const updatedOrdering = guild.channel_ordering.filter(
+			(id) => id != channel.id,
+		);
+		await Guild.update(
+			{ id: channel.guild_id },
+			{ channel_ordering: updatedOrdering },
+		);
 	}
 
 	static async calculatePosition(
@@ -487,15 +503,19 @@ export class Channel extends BaseClass {
 
 		const channels = await Promise.all(
 			guild.channel_ordering.map((id) =>
-				Channel.findOneOrFail({ where: { id } }),
+				Channel.findOne({ where: { id } }),
 			),
 		);
 
-		return channels.reduce((r, v) => {
-			v.position = (guild as Guild).channel_ordering.indexOf(v.id);
-			r[v.position] = v;
-			return r;
-		}, [] as Array<Channel>);
+		return channels
+			.filter((channel) => channel !== null)
+			.reduce((r, v) => {
+				v = v as Channel;
+
+				v.position = (guild as Guild).channel_ordering.indexOf(v.id);
+				r[v.position] = v;
+				return r;
+			}, [] as Array<Channel>);
 	}
 
 	isDm() {
