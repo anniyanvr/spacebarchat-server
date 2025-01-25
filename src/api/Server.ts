@@ -18,15 +18,15 @@
 
 import {
 	Config,
-	Email,
-	initDatabase,
-	initEvent,
-	JSONReplacer,
-	registerRoutes,
-	Sentry,
-	WebAuthn,
 	ConnectionConfig,
 	ConnectionLoader,
+	Email,
+	JSONReplacer,
+	Sentry,
+	WebAuthn,
+	initDatabase,
+	initEvent,
+	registerRoutes,
 } from "@spacebar/util";
 import { Request, Response, Router } from "express";
 import { Server, ServerOptions } from "lambert-server";
@@ -34,7 +34,7 @@ import "missing-native-js-functions";
 import morgan from "morgan";
 import path from "path";
 import { red } from "picocolors";
-import { Authentication, CORS } from "./middlewares/";
+import { Authentication, CORS, ImageProxy } from "./middlewares/";
 import { BodyParser } from "./middlewares/BodyParser";
 import { ErrorHandler } from "./middlewares/ErrorHandler";
 import { initRateLimits } from "./middlewares/RateLimit";
@@ -99,6 +99,9 @@ export class SpacebarServer extends Server {
 
 		this.app.set("json replacer", JSONReplacer);
 
+		const trustedProxies = Config.get().security.trustedProxies;
+		if (trustedProxies) this.app.set("trust proxy", trustedProxies);
+
 		this.app.use(CORS);
 		this.app.use(BodyParser({ inflate: true, limit: "10mb" }));
 
@@ -137,8 +140,14 @@ export class SpacebarServer extends Server {
 		app.use("/api/v9", api);
 		app.use("/api", api); // allow unversioned requests
 
+		app.use("/imageproxy/:hash/:size/:url", ImageProxy);
+
 		app.get("/", (req, res) =>
 			res.sendFile(path.join(PUBLIC_ASSETS_FOLDER, "index.html")),
+		);
+
+		app.get("/verify", (req, res) =>
+			res.sendFile(path.join(PUBLIC_ASSETS_FOLDER, "verify.html")),
 		);
 
 		this.app.use(ErrorHandler);

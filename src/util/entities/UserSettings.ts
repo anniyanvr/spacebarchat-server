@@ -1,25 +1,29 @@
 /*
 	Spacebar: A FOSS re-implementation and extension of the Discord.com backend.
 	Copyright (C) 2023 Spacebar and Spacebar Contributors
-	
+
 	This program is free software: you can redistribute it and/or modify
 	it under the terms of the GNU Affero General Public License as published
 	by the Free Software Foundation, either version 3 of the License, or
 	(at your option) any later version.
-	
+
 	This program is distributed in the hope that it will be useful,
 	but WITHOUT ANY WARRANTY; without even the implied warranty of
 	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 	GNU Affero General Public License for more details.
-	
+
 	You should have received a copy of the GNU Affero General Public License
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 import { Column, Entity, PrimaryGeneratedColumn } from "typeorm";
 import { BaseClassWithoutId } from "./BaseClass";
+import { dbEngine } from "../util/Database";
 
-@Entity("user_settings")
+@Entity({
+	name: "user_settings",
+	engine: dbEngine,
+})
 export class UserSettings extends BaseClassWithoutId {
 	@PrimaryGeneratedColumn()
 	index: string;
@@ -62,6 +66,9 @@ export class UserSettings extends BaseClassWithoutId {
 
 	@Column({ nullable: true })
 	explicit_content_filter: number = 0;
+
+	@Column({ nullable: true })
+	friend_discovery_flags: number = 0;
 
 	@Column({ nullable: true, type: "simple-json" })
 	friend_source_flags: FriendSourceFlags = { all: true };
@@ -116,6 +123,9 @@ export class UserSettings extends BaseClassWithoutId {
 
 	@Column({ nullable: true })
 	timezone_offset: number = 0; // e.g -60
+
+	@Column({ nullable: true })
+	view_nsfw_guilds: boolean = true;
 }
 
 interface CustomStatus {
